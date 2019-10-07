@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="
+	http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans-4.2.xsd
+	http://www.springframework.org/schema/context
+	http://www.springframework.org/schema/context/spring-context-4.2.xsd
+	http://www.springframework.org/schema/aop
+	http://www.springframework.org/schema/aop/spring-aop-4.2.xsd
+	http://www.springframework.org/schema/tx
+	http://www.springframework.org/schema/tx/spring-tx.xsd">
+
+    <!--开启注解的扫描，希望处理service和dao，controller不需要Spring框架去处理-->
+    <context:component-scan base-package="com.ssm" >
+        <!--配置哪些注解不扫描-->
+        <context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller" />
+    </context:component-scan>
+
+    <!-- 1. 配置读取jdbc.properties文件 -->
+    <context:property-placeholder location="classpath:jdbc.properties"/>
+    <!-- 2. 配置C3P0连接池 -->
+    <bean name="C3P0dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource" >
+        <property name="jdbcUrl" value="${jdbc.url}" ></property>
+        <property name="driverClass" value="${jdbc.driver}" ></property>
+        <property name="user" value="${jdbc.username}" ></property>
+        <property name="password" value="${jdbc.password}" ></property>
+    </bean>
+
+    <!--整合mybatis-->
+    <!--配置SqlSessionFactory工厂-->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <!--连接池的注入-->
+        <property name="dataSource" ref="C3P0dataSource" />
+        <!--指定mybatis的主配置文件的路径-->
+        <property name="configLocation" value="classpath:mybatis.xml" />
+        <!--指定mapper的配置路径-->
+        <property name="mapperLocations" value="classpath:mapper/*.xml"/>
+
+    </bean>
+
+    <!--配置Dao接口所在包-->
+    <bean id="mapperScanner" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <!--配置SqlSessionFactory工厂-->
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"/>
+        <!--扫描dao中所有接口 加入到IOC容器当中-->
+        <property name="basePackage" value="com.ssm.dao"/>
+    </bean>
+
+    <!--批量执行SqlSession-->
+    <bean id="sqlSession" class="org.mybatis.spring.SqlSessionTemplate">
+        <constructor-arg name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <constructor-arg name="executorType" value="BATCH" />
+    </bean>
+
+    <!--配置Spring框架声明式事务管理-->
+    <!--配置事务管理器-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="C3P0dataSource" />
+    </bean>
+
+    <!--配置事务通知-->
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <!-- 所有方法都是事务方法 -->
+            <tx:method name="*" isolation="DEFAULT" propagation="REQUIRED"/>
+            <!-- get查询方法为只读，优化查询效率 -->
+            <tx:method name="get*" read-only="true"/>
+        </tx:attributes>
+    </tx:advice>
+
+    <!--配置AOP增强-->
+    <aop:config>
+        <!--对service的所有的实现类的方法进行加强-->
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="mypointcut"/>
+        <aop:pointcut id="mypointcut" expression="execution(* com.ssm.service.impl.*ServiceImpl.*(..))"/>
+    </aop:config>
+
+</beans>
